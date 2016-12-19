@@ -54,6 +54,7 @@ def train():
 	"""Train CIFAR-10 for a number of steps."""
 	with tf.Graph().as_default():
 		ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
+		global_step_init = -1
 		if ckpt and ckpt.model_checkpoint_path:
 			# Assuming model_checkpoint_path looks something like:
 			#   /my-favorite-path/cifar10_train/model.ckpt-0,
