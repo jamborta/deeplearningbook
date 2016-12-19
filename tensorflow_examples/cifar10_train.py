@@ -53,7 +53,17 @@ tf.app.flags.DEFINE_boolean('log_device_placement', True,
 def train():
 	"""Train CIFAR-10 for a number of steps."""
 	with tf.Graph().as_default():
-		global_step = tf.contrib.framework.get_or_create_global_step()
+		ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
+		if ckpt and ckpt.model_checkpoint_path:
+			# Assuming model_checkpoint_path looks something like:
+			#   /my-favorite-path/cifar10_train/model.ckpt-0,
+			# extract global_step from it.
+			global_step_init = int(ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1])
+			global_step = tf.Variable(global_step_init, name='global_step', dtype=tf.int64, trainable=False)
+		else:
+			global_step = tf.contrib.framework.get_or_create_global_step()
+
+		# global_step = tf.contrib.framework.get_or_create_global_step()
 
 		# Get images and labels for CIFAR-10.
 		images, labels = cifar10.distorted_inputs()
@@ -73,7 +83,7 @@ def train():
 			"""Logs loss and runtime."""
 
 			def begin(self):
-				self._step = -1
+				self._step = global_step_init
 
 			def before_run(self, run_context):
 				self._step += 1
@@ -93,13 +103,19 @@ def train():
 					print(format_str % (datetime.now(), self._step, loss_value,
 										examples_per_sec, sec_per_batch))
 
+		saver = tf.train.Saver()
 		with tf.train.MonitoredTrainingSession(
 				checkpoint_dir=FLAGS.train_dir,
 				hooks=[tf.train.StopAtStepHook(last_step=FLAGS.max_steps),
 					   tf.train.NanTensorHook(loss),
 					   _LoggerHook()],
 				config=tf.ConfigProto(
-					log_device_placement=FLAGS.log_device_placement)) as mon_sess:
+					log_device_placement=FLAGS.log_device_placement),
+				save_checkpoint_secs=120
+		) as mon_sess:
+			ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
+			if ckpt and ckpt.model_checkpoint_path:
+				saver.restore(mon_sess, ckpt.model_checkpoint_path)
 			while not mon_sess.should_stop():
 				mon_sess.run(train_op)
 
